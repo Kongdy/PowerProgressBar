@@ -12,5 +12,6 @@
     <com.project.kongdy.powerprogressbar.View.PowerProgressBar
         android:id="@+id/progressBar"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:background="@color/colorPrimary"/>
 </RelativeLayout>

@@ -9,10 +9,15 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Point;
 import android.graphics.RectF;
 import android.os.Build;
 import android.text.TextPaint;
 import android.util.AttributeSet;
+import android.util.DisplayMetrics;
+import android.util.SparseArray;
+import android.util.SparseIntArray;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.Animation;
@@ -32,12 +37,12 @@ public class PowerProgressBar extends View {
     private Paint mainPaint;
     private Paint fullPaint;
     private TextPaint labelPaint;
+    private Paint rulerPaint;
 
     /** 进度条宽度 */
     private int progressWidth = -1;
 
     private Path progressClipPath;
-
     private Path progressFullPath;
 
     private int mWidth;
@@ -48,13 +53,17 @@ public class PowerProgressBar extends View {
 
     private int progressColor;
     private int progressBgColor;
+    private int rulerColor;
+    private int labelColor;
 
     private boolean setProgressColor = false;
     private boolean setProgressBgColor = false;
+    private boolean setRulerColor = false;
+    private boolean setLabelColor = false;
 
     /** 外部标注宽度 */
-    private int labelWidth;
-    private int labelSize;
+    private int labelWidth = 0;
+    private float labelSize = -1;
 
     /** 中间部分的自定义区域 */
     private View centerView;
@@ -72,6 +81,8 @@ public class PowerProgressBar extends View {
 
     private Runnable startAniamlRunnable;
 
+    private SparseIntArray labelList;
+    private SparseArray<Point> labelCoord;
 
     public PowerProgressBar(Context context) {
         super(context);
@@ -93,6 +104,7 @@ public class PowerProgressBar extends View {
 
         mainPaint = new Paint();
         fullPaint = new Paint();
+        rulerPaint = new Paint();
         labelPaint = new TextPaint();
         progressClipPath = new Path();
         progressFullPath = new Path();
@@ -101,11 +113,13 @@ public class PowerProgressBar extends View {
         mainPaint.setAntiAlias(true);
         fullPaint.setAntiAlias(true);
         labelPaint.setAntiAlias(true);
+        rulerPaint.setAntiAlias(true);
 
         // 防抖动
         mainPaint.setDither(true);
         fullPaint.setDither(true);
         labelPaint.setDither(true);
+        rulerPaint.setDither(true);
 
         // 滤波处理
        /* 图像滤波，即在尽量保留图像细节特征的条件下对目标图像的噪声进行抑制，
@@ -120,6 +134,7 @@ public class PowerProgressBar extends View {
 
         mainPaint.setStyle(Paint.Style.STROKE);
         fullPaint.setStyle(Paint.Style.STROKE);
+        rulerPaint.setStyle(Paint.Style.STROKE);
 
         // 画笔结合处样式
         mainPaint.setStrokeJoin(Paint.Join.ROUND);
@@ -131,15 +146,22 @@ public class PowerProgressBar extends View {
 
         mainPaint.setStrokeWidth(getProgressWidth());
         fullPaint.setStrokeWidth(getProgressWidth());
+        rulerPaint.setStrokeWidth(getRawSize(TypedValue.COMPLEX_UNIT_DIP,1)); // 赋值1dp的宽度
+
+        labelPaint.setTextSize(getLabelSize());
 
         mainPaint.setColor(getProgressColor());
         fullPaint.setColor(getProgressBgColor());
+        rulerPaint.setColor(getRulerColor());
+        labelPaint.setColor(getLabelColor());
 
         // 头发的特技
         BlurMaskFilter blurMaskFilter = new BlurMaskFilter(50,BlurMaskFilter.Blur.SOLID);
         mainPaint.setMaskFilter(blurMaskFilter);
         setLayerType(View.LAYER_TYPE_SOFTWARE,null); // 启用软件加速，防止在4.0以上不产生效果
 
+        labelList = new SparseIntArray();
+        labelCoord = new SparseArray<>();
     }
 
     @Override
@@ -154,6 +176,10 @@ public class PowerProgressBar extends View {
 
         canvas.drawPath(progressFullPath,fullPaint);
         canvas.drawPath(progressClipPath,mainPaint);
+
+        for (int i = 0;i < labelList.size();i++) {
+            canvas.drawText(labelList.get(i)+"",labelCoord.get(i).x,labelCoord.get(i).y,labelPaint);
+        }
 
         canvas.restore();
     }
@@ -183,6 +209,18 @@ public class PowerProgressBar extends View {
         if(progressWidth == -1) {
             setProgressWidth(mRadius/5);
         }
+        // 计算label坐标
+        float unitAngle = getMaxAngle()/(labelList.size()+1);
+        float labelRadius = mRadius+mainPaint.getStrokeWidth();
+        for (int i = 0;i < labelList.size();i++) {
+            Point point = new Point();
+
+            float angle = unitAngle*(i+1)+startAngle;
+            point.y = (int) (centerY + Math.sin(Math.toRadians(angle))*labelRadius);
+            point.x = (int) (centerX+Math.cos(Math.toRadians(angle))*labelRadius);
+
+            labelCoord.put(i,point);
+        }
     }
 
 
@@ -210,6 +248,11 @@ public class PowerProgressBar extends View {
         mainPaint.setStrokeWidth(progressWidth);
         fullPaint.setStrokeWidth(progressWidth);
         invalidate();
+    }
+
+    private float getRawSize(int unit,int value) {
+        DisplayMetrics displayMetrics = getContext().getResources().getDisplayMetrics();
+        return TypedValue.applyDimension(unit,value,displayMetrics);
     }
 
 
@@ -245,18 +288,6 @@ public class PowerProgressBar extends View {
         animator.setDuration(startTime);
         animator.setInterpolator(new AccelerateInterpolator());
         animator.start();
-
-//        if(startAniamlRunnable != null) {
-//            removeCallbacks(startAniamlRunnable);
-//        }
-//
-//        startAniamlRunnable = new Runnable() {
-//            @Override
-//            public void run() {
-//
-//            }
-//        };
-//        post(startAniamlRunnable);
     }
 
 
@@ -371,5 +402,70 @@ public class PowerProgressBar extends View {
 
     public void setStartAnimal(boolean startAnimal) {
         this.startAnimal = startAnimal;
+    }
+
+    public int getRulerColor() {
+        if(!setRulerColor) {
+            rulerColor = Color.rgb(199,199,199);
+        }
+        return rulerColor;
+    }
+
+    public void setRulerColor(int rulerColor) {
+        this.rulerColor = rulerColor;
+        setRulerColor = true;
+    }
+
+    public int getLabelColor() {
+        if(!setLabelColor) {
+            labelColor = Color.rgb(199,199,199);
+        }
+        return labelColor;
+    }
+
+    public void setLabelColor(int labelColor) {
+        this.labelColor = labelColor;
+        setLabelColor = true;
+    }
+
+    public float getLabelSize() {
+        if(labelSize == -1) {
+            labelSize = getRawSize(TypedValue.COMPLEX_UNIT_SP,12);
+        }
+        return labelSize;
+    }
+
+    public void setLabelSize(int labelSize) {
+        this.labelSize = labelSize;
+    }
+
+    /**
+     * 设置label
+     * @param minValue
+     * @param maxValue
+     * @param valueStep
+     */
+    public void setLabel(int minValue,int maxValue,int valueStep) {
+        if(maxValue < minValue) {
+            maxValue = minValue;
+        }
+        if((maxValue - minValue) < valueStep) {
+            valueStep = maxValue - minValue;
+        }
+        int i = 0;
+        int tempValue = minValue;
+        while(tempValue <= maxValue) {
+            labelList.put(i,tempValue);
+            tempValue = tempValue+valueStep;
+            i++;
+        }
+    }
+
+    /**
+     * 设置label
+     * @param array
+     */
+    public void setLabel(SparseIntArray array) {
+        this.labelList = array;
     }
 }

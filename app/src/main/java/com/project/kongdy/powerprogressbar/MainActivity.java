@@ -15,7 +15,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         progressBar = (PowerProgressBar) findViewById(R.id.progressBar);
-
+        progressBar.setLabel(34,45,1);
         progressBar.setProgressValue(75f);
     }
 
