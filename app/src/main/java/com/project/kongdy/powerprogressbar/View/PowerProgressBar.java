@@ -7,10 +7,14 @@ import android.content.Context;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.DashPathEffect;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.PathEffect;
 import android.graphics.Point;
 import android.graphics.RectF;
+import android.graphics.SweepGradient;
 import android.os.Build;
 import android.text.TextPaint;
 import android.util.AttributeSet;
@@ -20,7 +24,6 @@ import android.util.SparseIntArray;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.animation.AccelerateInterpolator;
-import android.view.animation.Animation;
 
 /**
  * @author kongdy
@@ -51,15 +54,17 @@ public class PowerProgressBar extends View {
     private int centerX;
     private int centerY;
 
-    private int progressColor;
+    private int[] progressColor;
     private int progressBgColor;
     private int rulerColor;
     private int labelColor;
 
-    private boolean setProgressColor = false;
     private boolean setProgressBgColor = false;
     private boolean setRulerColor = false;
     private boolean setLabelColor = false;
+    private boolean showHalo = true;
+
+    private ProgressStyle progressStyle;// 默认实线
 
     /** 外部标注宽度 */
     private int labelWidth = 0;
@@ -79,10 +84,13 @@ public class PowerProgressBar extends View {
 
     private RectF progressRectF;
 
-    private Runnable startAniamlRunnable;
+    // 开场动画
+    private ValueAnimator animator;
 
     private SparseIntArray labelList;
     private SparseArray<Point> labelCoord;
+    private SparseArray<Point> rulerStartCoord;
+    private SparseArray<Point> rulerEndCoord;
 
     public PowerProgressBar(Context context) {
         super(context);
@@ -132,17 +140,33 @@ public class PowerProgressBar extends View {
         //mainPaint.setSubpixelText(true);
         labelPaint.setSubpixelText(true);
 
+        labelPaint.setTextAlign(Paint.Align.CENTER);
+
         mainPaint.setStyle(Paint.Style.STROKE);
         fullPaint.setStyle(Paint.Style.STROKE);
         rulerPaint.setStyle(Paint.Style.STROKE);
 
-        // 画笔结合处样式
-        mainPaint.setStrokeJoin(Paint.Join.ROUND);
-        fullPaint.setStrokeJoin(Paint.Join.ROUND);
 
-        // 画笔端头样式
-        mainPaint.setStrokeCap(Paint.Cap.ROUND);
-        fullPaint.setStrokeCap(Paint.Cap.ROUND);
+        labelList = new SparseIntArray();
+        labelCoord = new SparseArray<>();
+        rulerStartCoord = new SparseArray<>();
+        rulerEndCoord = new SparseArray<>();
+    }
+
+    private void initProperty() {
+        if(getProgressStyle() == ProgressStyle.DASHEDLINE) {
+            PathEffect pathEffect = new DashPathEffect(new float[]{15,15,15,15},0);
+            mainPaint.setPathEffect(pathEffect);
+            fullPaint.setPathEffect(pathEffect);
+        } else {
+            // 画笔结合处样式
+            mainPaint.setStrokeJoin(Paint.Join.BEVEL);
+            fullPaint.setStrokeJoin(Paint.Join.BEVEL);
+
+            // 画笔端头样式
+            mainPaint.setStrokeCap(Paint.Cap.ROUND);
+            fullPaint.setStrokeCap(Paint.Cap.ROUND);
+        }
 
         mainPaint.setStrokeWidth(getProgressWidth());
         fullPaint.setStrokeWidth(getProgressWidth());
@@ -150,18 +174,9 @@ public class PowerProgressBar extends View {
 
         labelPaint.setTextSize(getLabelSize());
 
-        mainPaint.setColor(getProgressColor());
         fullPaint.setColor(getProgressBgColor());
         rulerPaint.setColor(getRulerColor());
         labelPaint.setColor(getLabelColor());
-
-        // 头发的特技
-        BlurMaskFilter blurMaskFilter = new BlurMaskFilter(50,BlurMaskFilter.Blur.SOLID);
-        mainPaint.setMaskFilter(blurMaskFilter);
-        setLayerType(View.LAYER_TYPE_SOFTWARE,null); // 启用软件加速，防止在4.0以上不产生效果
-
-        labelList = new SparseIntArray();
-        labelCoord = new SparseArray<>();
     }
 
     @Override
@@ -178,9 +193,12 @@ public class PowerProgressBar extends View {
         canvas.drawPath(progressClipPath,mainPaint);
 
         for (int i = 0;i < labelList.size();i++) {
+            // 画label
             canvas.drawText(labelList.get(i)+"",labelCoord.get(i).x,labelCoord.get(i).y,labelPaint);
+            // 画刻度
+            canvas.drawLine(rulerStartCoord.get(i).x,rulerStartCoord.get(i).y,
+                    rulerEndCoord.get(i).x,rulerEndCoord.get(i).y,rulerPaint);
         }
-
         canvas.restore();
     }
 
@@ -195,12 +213,23 @@ public class PowerProgressBar extends View {
         final int minDistance = centerX < centerY?centerX:centerY;
         mRadius = (int)(9*(minDistance/10)-labelWidth-mainPaint.getStrokeWidth());
         resetPath();
+        initProperty();
     }
 
     private void resetPath() {
+        if(getProgressColor().length < 2) {
+            mainPaint.setColor(getProgressColor()[0]);
+        } else {
+            SweepGradient sweepGradient = new SweepGradient(centerX,centerY,getProgressColor(),null);
+            Matrix rotateMartix = new Matrix();
+            rotateMartix.setRotate(90f,centerX,centerY);
+            sweepGradient.setLocalMatrix(rotateMartix);
+            mainPaint.setShader(sweepGradient);
+        }
+
         progressRectF = new RectF(centerX-mRadius,centerY-mRadius,centerX+mRadius,
                centerY+mRadius);
-        float startAngle = ((100f-getProgressValue())/100f)*360f*1.5f;
+        float startAngle = (360f-getMaxAngle())/2+90f;
         // 清除路径
         progressClipPath.reset();
         progressClipPath.addArc(progressRectF,startAngle,(currentValue/100f)*getMaxAngle());
@@ -209,17 +238,29 @@ public class PowerProgressBar extends View {
         if(progressWidth == -1) {
             setProgressWidth(mRadius/5);
         }
-        // 计算label坐标
         float unitAngle = getMaxAngle()/(labelList.size()+1);
         float labelRadius = mRadius+mainPaint.getStrokeWidth();
+        labelCoord.clear();
+        rulerStartCoord.clear();
+        rulerEndCoord.clear();
         for (int i = 0;i < labelList.size();i++) {
+            // 计算label坐标
             Point point = new Point();
-
             float angle = unitAngle*(i+1)+startAngle;
             point.y = (int) (centerY + Math.sin(Math.toRadians(angle))*labelRadius);
             point.x = (int) (centerX+Math.cos(Math.toRadians(angle))*labelRadius);
-
             labelCoord.put(i,point);
+            // 计算ruler坐标偏移值,start
+            float rulerRadius = mRadius+mainPaint.getStrokeWidth()/2;
+            Point point1 = new Point();
+            point1.x = (int) (centerX+Math.cos(Math.toRadians(angle))*rulerRadius);
+            point1.y = (int) (centerY + Math.sin(Math.toRadians(angle))*rulerRadius);
+            rulerStartCoord.put(i,point1);
+            // end
+            Point point2 = new Point();
+            point2.x = (int) (centerX+Math.cos(Math.toRadians(angle))*(rulerRadius-mainPaint.getStrokeWidth()*2/3));
+            point2.y = (int) (centerY + Math.sin(Math.toRadians(angle))*(rulerRadius-mainPaint.getStrokeWidth()*2/3));
+            rulerEndCoord.put(i,point2);
         }
     }
 
@@ -257,37 +298,58 @@ public class PowerProgressBar extends View {
 
 
     private void animalToStart() {
+        if(animator == null) {
+            final long startTime = getStartAnimalTime();
+            animator = ValueAnimator.ofFloat(0f,progressValue);
+            animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                    currentValue = (float) valueAnimator.getAnimatedValue();
+                    reDraw();
+                }
+            });
+            animator.addListener(new Animator.AnimatorListener() {
+                @Override
+                public void onAnimationStart(Animator animator) {
+                }
+                @Override
+                public void onAnimationEnd(Animator animator) {
+                    startAnimalEnd();
+                }
+                @Override
+                public void onAnimationCancel(Animator animator) {
+                    startAnimalEnd();
+                }
+                @Override
+                public void onAnimationRepeat(Animator animator) {
+                }
+            });
+            // 400毫秒的开启延迟
+            animator.setStartDelay(400);
+            animator.setDuration(startTime);
+            animator.setInterpolator(new AccelerateInterpolator());
+            animator.start();
+        }
+    }
 
-        final long startTime = getStartAnimalTime();
-        ValueAnimator animator = ValueAnimator.ofFloat(0f,progressValue);
-        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator valueAnimator) {
-                currentValue = (float) valueAnimator.getAnimatedValue();
-                reDraw();
-            }
-        });
-        animator.addListener(new Animator.AnimatorListener() {
-            @Override
-            public void onAnimationStart(Animator animator) {
-            }
-            @Override
-            public void onAnimationEnd(Animator animator) {
-                startAniamlRunnable = null;
-            }
-            @Override
-            public void onAnimationCancel(Animator animator) {
-                startAniamlRunnable = null;
-            }
-            @Override
-            public void onAnimationRepeat(Animator animator) {
-            }
-        });
-        // 400毫秒的开启延迟
-        animator.setStartDelay(400);
-        animator.setDuration(startTime);
-        animator.setInterpolator(new AccelerateInterpolator());
-        animator.start();
+    private void startAnimalEnd() {
+        animator = null;
+        if(showHalo) {
+            // 头发的特技
+            setLayerType(View.LAYER_TYPE_SOFTWARE,null); // 启用软件加速，防止在4.0以上不产生效果
+            ValueAnimator animator1 = ValueAnimator.ofFloat(1f,50f);
+            animator1.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                    float value = (float) valueAnimator.getAnimatedValue();
+                    BlurMaskFilter blurMaskFilter = new BlurMaskFilter(value,BlurMaskFilter.Blur.SOLID);
+                    mainPaint.setMaskFilter(blurMaskFilter);
+                    invalidate();
+                }
+            });
+            animator1.setDuration(300);
+            animator1.start();
+        }
     }
 
 
@@ -361,15 +423,14 @@ public class PowerProgressBar extends View {
         setProgressBgColor = true;
     }
 
-    public int getProgressColor() {
-        if(!setProgressColor)
-            this.progressColor = Color.rgb(155,225,103);
+    public int[] getProgressColor() {
+        if(progressColor == null)
+            progressColor = new int[]{Color.rgb(155,225,103)};
         return progressColor;
     }
 
-    public void setProgressColor(int progressColor) {
+    public void setProgressColor(int[] progressColor) {
         this.progressColor = progressColor;
-        setProgressColor = true;
     }
 
     public View getCenterView() {
@@ -387,7 +448,7 @@ public class PowerProgressBar extends View {
 
     public long getStartAnimalTime() {
         if(startAnimalTime <= 0){
-            this.startAnimalTime = 1000;
+            this.startAnimalTime = 800;
         }
         return startAnimalTime;
     }
@@ -406,7 +467,7 @@ public class PowerProgressBar extends View {
 
     public int getRulerColor() {
         if(!setRulerColor) {
-            rulerColor = Color.rgb(199,199,199);
+            rulerColor = Color.rgb(220,220,220);
         }
         return rulerColor;
     }
@@ -468,4 +529,40 @@ public class PowerProgressBar extends View {
     public void setLabel(SparseIntArray array) {
         this.labelList = array;
     }
+
+    public boolean isShowHalo() {
+        return showHalo;
+    }
+
+    /**
+     * 是否显示光晕
+     * @param showHalo
+     */
+    public void setShowHalo(boolean showHalo) {
+        this.showHalo = showHalo;
+    }
+
+    public ProgressStyle getProgressStyle() {
+        if(progressStyle == null) {
+            progressStyle = ProgressStyle.FILLLINE;
+        }
+        return progressStyle;
+    }
+
+    public void setProgressStyle(ProgressStyle progressStyle) {
+        this.progressStyle = progressStyle;
+
+        invalidate();
+    }
+
+    /**
+     * 只是进度条样式
+     */
+    public static enum ProgressStyle{
+        /** 虚线 */
+        DASHEDLINE,
+        /** 实线 */
+        FILLLINE,
+    }
+
 }
