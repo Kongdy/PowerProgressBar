@@ -23,6 +23,7 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.TypedValue;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.animation.AccelerateInterpolator;
 
 /**
@@ -41,6 +42,7 @@ public class PowerProgressBar extends View {
     private Paint fullPaint;
     private TextPaint labelPaint;
     private Paint rulerPaint;
+    private Paint externalPaint;
 
     /** 进度条宽度 */
     private int progressWidth = -1;
@@ -63,11 +65,11 @@ public class PowerProgressBar extends View {
     private boolean setRulerColor = false;
     private boolean setLabelColor = false;
     private boolean showHalo = true;
+    private boolean externalCircle = false;
 
     private ProgressStyle progressStyle;// 默认实线
 
     /** 外部标注宽度 */
-    private int labelWidth = 0;
     private float labelSize = -1;
 
     /** 中间部分的自定义区域 */
@@ -83,6 +85,12 @@ public class PowerProgressBar extends View {
     private boolean startAnimal = true;
 
     private RectF progressRectF;
+    /** 基点角度，计算过程中，将根据该值产生基点的角度偏移，默认90度 */
+    private float BasePointAngle = 90f;
+    /** 设置进度条比率 */
+    private double progressWidthRate = -1;
+
+    private float startAngle;
 
     // 开场动画
     private ValueAnimator animator;
@@ -91,6 +99,7 @@ public class PowerProgressBar extends View {
     private SparseArray<Point> labelCoord;
     private SparseArray<Point> rulerStartCoord;
     private SparseArray<Point> rulerEndCoord;
+    private SparseIntArray bgColor;
 
     public PowerProgressBar(Context context) {
         super(context);
@@ -107,7 +116,6 @@ public class PowerProgressBar extends View {
         init();
     }
 
-
     private void init() {
 
         mainPaint = new Paint();
@@ -116,29 +124,6 @@ public class PowerProgressBar extends View {
         labelPaint = new TextPaint();
         progressClipPath = new Path();
         progressFullPath = new Path();
-
-        // 抗锯齿
-        mainPaint.setAntiAlias(true);
-        fullPaint.setAntiAlias(true);
-        labelPaint.setAntiAlias(true);
-        rulerPaint.setAntiAlias(true);
-
-        // 防抖动
-        mainPaint.setDither(true);
-        fullPaint.setDither(true);
-        labelPaint.setDither(true);
-        rulerPaint.setDither(true);
-
-        // 滤波处理
-       /* 图像滤波，即在尽量保留图像细节特征的条件下对目标图像的噪声进行抑制，
-        是图像预处理中不可缺少的操作，其处理效果的好坏将直接影响到后续图像处理和分析的有效性和可靠性*/
-        mainPaint.setFilterBitmap(true);
-        fullPaint.setFilterBitmap(true);
-        labelPaint.setFilterBitmap(true);
-
-        // 文字自像素处理，有助于文字在LCD屏幕的显示效果
-        //mainPaint.setSubpixelText(true);
-        labelPaint.setSubpixelText(true);
 
         labelPaint.setTextAlign(Paint.Align.CENTER);
 
@@ -151,14 +136,17 @@ public class PowerProgressBar extends View {
         labelCoord = new SparseArray<>();
         rulerStartCoord = new SparseArray<>();
         rulerEndCoord = new SparseArray<>();
+
+        OpenHighQuality(true);
     }
 
+    // TODO: 2016/7/18  need measure DASHEDLINE effect padding distances
     private void initProperty() {
         if(getProgressStyle() == ProgressStyle.DASHEDLINE) {
             PathEffect pathEffect = new DashPathEffect(new float[]{15,15,15,15},0);
             mainPaint.setPathEffect(pathEffect);
             fullPaint.setPathEffect(pathEffect);
-        } else {
+        } else if(getProgressStyle() == ProgressStyle.FILLLINE) {
             // 画笔结合处样式
             mainPaint.setStrokeJoin(Paint.Join.BEVEL);
             fullPaint.setStrokeJoin(Paint.Join.BEVEL);
@@ -166,6 +154,11 @@ public class PowerProgressBar extends View {
             // 画笔端头样式
             mainPaint.setStrokeCap(Paint.Cap.ROUND);
             fullPaint.setStrokeCap(Paint.Cap.ROUND);
+        } else if(getProgressStyle() == ProgressStyle.CURSOR) {
+            mainPaint.setStyle(Paint.Style.FILL_AND_STROKE);
+            // 画笔结合处样式
+            mainPaint.setStrokeJoin(Paint.Join.BEVEL);
+            fullPaint.setStrokeJoin(Paint.Join.BEVEL);
         }
 
         mainPaint.setStrokeWidth(getProgressWidth());
@@ -182,14 +175,24 @@ public class PowerProgressBar extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-
         canvas.saveLayer(0,0,getMeasuredWidth(),getMeasuredHeight(),mainPaint,Canvas.ALL_SAVE_FLAG);
 
-        if(centerView != null) {
-            centerView.draw(canvas);
+        if(externalPaint != null && externalCircle) {
+            canvas.drawCircle(centerX,centerY,mRadius+mainPaint.getStrokeWidth(),externalPaint);
         }
-
-        canvas.drawPath(progressFullPath,fullPaint);
+        if(progressStyle == ProgressStyle.CURSOR) {
+            float cursorAngle = startAngle+1;
+            float growAngle = getMaxAngle()/bgColor.size()-2;
+            for (int i = 0;i < bgColor.size();i++) {
+                progressFullPath.reset();
+                fullPaint.setColor(bgColor.get(i));
+                progressFullPath.addArc(progressRectF,cursorAngle,growAngle);
+                canvas.drawPath(progressFullPath,fullPaint);
+                cursorAngle = cursorAngle+growAngle+2;
+            }
+        } else {
+            canvas.drawPath(progressFullPath,fullPaint);
+        }
         canvas.drawPath(progressClipPath,mainPaint);
 
         for (int i = 0;i < labelList.size();i++) {
@@ -199,22 +202,12 @@ public class PowerProgressBar extends View {
             canvas.drawLine(rulerStartCoord.get(i).x,rulerStartCoord.get(i).y,
                     rulerEndCoord.get(i).x,rulerEndCoord.get(i).y,rulerPaint);
         }
+        if(centerView != null) {
+            centerView.draw(canvas);
+        }
         canvas.restore();
     }
 
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-
-        mWidth = MeasureSpec.getSize(widthMeasureSpec);
-        mHeight = MeasureSpec.getSize(heightMeasureSpec);
-        centerX = mWidth/2;
-        centerY = mHeight/2;
-        final int minDistance = centerX < centerY?centerX:centerY;
-        mRadius = (int)(9*(minDistance/10)-labelWidth-mainPaint.getStrokeWidth());
-        resetPath();
-        initProperty();
-    }
 
     private void resetPath() {
         if(getProgressColor().length < 2) {
@@ -226,18 +219,34 @@ public class PowerProgressBar extends View {
             sweepGradient.setLocalMatrix(rotateMartix);
             mainPaint.setShader(sweepGradient);
         }
-
+        if(progressWidth == -1) {
+            setProgressWidth((int) (mRadius*getProgressWidthRate()));
+        } else {
+            setProgressWidth(progressWidth);
+        }
         progressRectF = new RectF(centerX-mRadius,centerY-mRadius,centerX+mRadius,
                centerY+mRadius);
-        float startAngle = (360f-getMaxAngle())/2+90f;
+        startAngle  = (360f-getMaxAngle())/2+getBasePointAngle();
+        float currentAngle = startAngle+(currentValue/100f)*getMaxAngle();
+
         // 清除路径
         progressClipPath.reset();
-        progressClipPath.addArc(progressRectF,startAngle,(currentValue/100f)*getMaxAngle());
+        if(getProgressStyle() == ProgressStyle.CURSOR) {
+            mainPaint.setStrokeWidth(1);
+            progressClipPath.moveTo((float)(centerX+Math.cos(Math.toRadians(currentAngle-10))*(mRadius-fullPaint.getStrokeWidth()/2)),
+                    (float) (centerY+Math.sin(Math.toRadians(currentAngle-10))*(mRadius-fullPaint.getStrokeWidth()/2)));
+            progressClipPath.lineTo((float)(centerX+Math.cos(Math.toRadians(currentAngle))*(mRadius+fullPaint.getStrokeWidth()/6)),
+                    (float) (centerY+Math.sin(Math.toRadians(currentAngle))*(mRadius+fullPaint.getStrokeWidth()/6)));
+            progressClipPath.lineTo((float)(centerX+Math.cos(Math.toRadians(currentAngle+10))*(mRadius-fullPaint.getStrokeWidth()/2)),
+                    (float) (centerY+Math.sin(Math.toRadians(currentAngle+10))*(mRadius-fullPaint.getStrokeWidth()/2)));
+            progressClipPath.close();
+        } else {
+            progressClipPath.addArc(progressRectF,startAngle,(currentValue/100f)*getMaxAngle());
+        }
+
         progressFullPath.reset();
         progressFullPath.addArc(progressRectF,startAngle,getMaxAngle());
-        if(progressWidth == -1) {
-            setProgressWidth(mRadius/5);
-        }
+
         float unitAngle = getMaxAngle()/(labelList.size()+1);
         float labelRadius = mRadius+mainPaint.getStrokeWidth();
         labelCoord.clear();
@@ -275,15 +284,44 @@ public class PowerProgressBar extends View {
         }
     }
 
+    /**
+     * 开关高画质
+     * @param flag
+     */
+    public void OpenHighQuality(boolean flag) {
+        // 抗锯齿
+        mainPaint.setAntiAlias(flag);
+        fullPaint.setAntiAlias(flag);
+        labelPaint.setAntiAlias(flag);
+        rulerPaint.setAntiAlias(flag);
 
-    public int getProgressWidth() {
-        if(progressWidth != -1) {
-            return progressWidth;
-        } else {
-            return 50;
-        }
+        // 防抖动
+        mainPaint.setDither(flag);
+        fullPaint.setDither(flag);
+        labelPaint.setDither(flag);
+        rulerPaint.setDither(flag);
+
+        // 滤波处理
+       /* 图像滤波，即在尽量保留图像细节特征的条件下对目标图像的噪声进行抑制，
+        是图像预处理中不可缺少的操作，其处理效果的好坏将直接影响到后续图像处理和分析的有效性和可靠性*/
+        mainPaint.setFilterBitmap(flag);
+        fullPaint.setFilterBitmap(flag);
+        labelPaint.setFilterBitmap(flag);
+
+        // 文字自像素处理，有助于文字在LCD屏幕的显示效果
+        //mainPaint.setSubpixelText(true);
+        labelPaint.setSubpixelText(flag);
     }
 
+
+    public int getProgressWidth() {
+        return progressWidth;
+    }
+
+    /**
+     * 设置详进度条宽度的精确宽度
+     * @param progressWidth
+     */
     public void setProgressWidth(int progressWidth) {
         this.progressWidth = progressWidth;
         mainPaint.setStrokeWidth(progressWidth);
@@ -291,11 +329,21 @@ public class PowerProgressBar extends View {
         invalidate();
     }
 
-    private float getRawSize(int unit,int value) {
+    public double getProgressWidthRate() {
+        if(progressWidthRate < 0) {
+            progressWidthRate = 0.2d;
+        }
+        return progressWidthRate;
+    }
+
+    public void setProgressWidthRate(double progressWidthRate) {
+        this.progressWidthRate = progressWidthRate;
+    }
+
+    private float getRawSize(int unit, int value) {
         DisplayMetrics displayMetrics = getContext().getResources().getDisplayMetrics();
         return TypedValue.applyDimension(unit,value,displayMetrics);
     }
-
 
     private void animalToStart() {
         if(animator == null) {
@@ -356,9 +404,48 @@ public class PowerProgressBar extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
+        initProperty();
+        // 根据度数的改变进度条也会相应的改变大小
+        mWidth = w-getPaddingLeft()-getPaddingRight();
+        mHeight = h-getPaddingTop()-getPaddingBottom();
+        centerX = mWidth/2;
+        if(externalCircle) {
+            centerY = mHeight/2;
+            final int minDistance = centerX < centerY?centerX:centerY;
+            mRadius = (int)(9*(minDistance/10)-mainPaint.getStrokeWidth()*1.5f);
+        } else {
+            double tempDis = 1- Math.cos(Math.toRadians(360f-getMaxAngle())/2d);
+            int tempRadius = (9*mHeight/20);
+            centerY = (int) (tempRadius+tempRadius*tempDis);
+            final int minDistance = centerX < centerY?centerX:centerY;
+            mRadius = (int)(9*(minDistance/10)-mainPaint.getStrokeWidth());
+        }
+        if(labelList.size() < 1) {
+            mRadius = (int) (mRadius-labelPaint.getTextSize());
+        }
+        resetPath();
         // 控件发生改变，执行开始动画
         animalToStart();
     }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        if(centerView != null) {
+            centerView.measure(MeasureSpec.makeMeasureSpec(mWidth,MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(centerY*2,MeasureSpec.EXACTLY));
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean b, int i, int i1, int i2, int i3) {
+        if(centerView != null) {
+//            centerView.layout((int)(mWidth-mRadius+mainPaint.getStrokeWidth()),(int)(mHeight-mRadius+mainPaint.getStrokeWidth())
+//                    ,(int)(centerX+mRadius-mainPaint.getStrokeWidth()),(int)(centerY+mRadius-mainPaint.getStrokeWidth()));
+            centerView.layout(100,30,mWidth,mHeight);
+        }
+    }
+
 
     /**
      * 默认270度
@@ -418,8 +505,15 @@ public class PowerProgressBar extends View {
     }
 
 
-    public void setProgressBgColor(int progressBgColor) {
-        this.progressBgColor = progressBgColor;
+    public void setProgressBgColor(int... progressBgColor) {
+        if(progressBgColor.length > 0&& progressBgColor.length <= 1)
+            this.progressBgColor = progressBgColor[0];
+        else
+        {   bgColor = new SparseIntArray();
+            for (int i = 0;i < progressBgColor.length;i++) {
+                bgColor.put(i,progressBgColor[i]);
+            }
+        }
         setProgressBgColor = true;
     }
 
@@ -440,8 +534,13 @@ public class PowerProgressBar extends View {
     /**
      * 设置中间区域的布局
      * @param centerView
+     * 由于时间问题，改方法未完善，使用的时候会造成不必要的布局错误
      */
+    @Deprecated
     public void setCenterView(View centerView) {
+        if(centerView.getParent() != null) {
+            ((ViewGroup)centerView.getParent()).removeView(centerView);
+        }
         this.centerView = centerView;
         invalidate();
     }
@@ -506,7 +605,7 @@ public class PowerProgressBar extends View {
      * @param maxValue
      * @param valueStep
      */
-    public void setLabel(int minValue,int maxValue,int valueStep) {
+    public PowerProgressBar setLabel(int minValue, int maxValue, int valueStep) {
         if(maxValue < minValue) {
             maxValue = minValue;
         }
@@ -520,6 +619,7 @@ public class PowerProgressBar extends View {
             tempValue = tempValue+valueStep;
             i++;
         }
+        return null;
     }
 
     /**
@@ -551,18 +651,39 @@ public class PowerProgressBar extends View {
 
     public void setProgressStyle(ProgressStyle progressStyle) {
         this.progressStyle = progressStyle;
-
         invalidate();
     }
 
+    public float getBasePointAngle() {
+        return BasePointAngle;
+    }
+
+    public void setBasePointAngle(float basePointAngle) {
+        BasePointAngle = basePointAngle;
+    }
+
+    public boolean isExternalCircle() {
+        return externalCircle;
+    }
+
+    public void setExternalCircle(boolean externalCircle,int color) {
+        this.externalCircle = externalCircle;
+        externalPaint = new Paint();
+        externalPaint.setStyle(Paint.Style.STROKE);
+        externalPaint.setStrokeWidth(getRawSize(TypedValue.COMPLEX_UNIT_DIP,1));
+        externalPaint.setColor(color);
+    }
+
     /**
-     * 只是进度条样式
+     * 进度条样式
      */
     public static enum ProgressStyle{
         /** 虚线 */
         DASHEDLINE,
         /** 实线 */
         FILLLINE,
+        /** 三角指针 */
+        CURSOR,
     }
 
 }
