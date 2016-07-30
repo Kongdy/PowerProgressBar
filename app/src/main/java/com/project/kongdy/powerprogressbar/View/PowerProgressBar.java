@@ -65,7 +65,7 @@ public class PowerProgressBar extends View {
     private boolean setRulerColor = false;
     private boolean setLabelColor = false;
     private boolean showHalo = true;
-    private boolean externalCircle = false;
+    private boolean externalCircle = false; // 是否增加一个外圈
 
     private ProgressStyle progressStyle;// 默认实线
 
@@ -133,9 +133,9 @@ public class PowerProgressBar extends View {
 
 
         labelList = new SparseIntArray();
-        labelCoord = new SparseArray<>();
-        rulerStartCoord = new SparseArray<>();
-        rulerEndCoord = new SparseArray<>();
+        labelCoord = new SparseArray<Point>();
+        rulerStartCoord = new SparseArray<Point>();
+        rulerEndCoord = new SparseArray<Point>();
 
         OpenHighQuality(true);
     }
@@ -161,9 +161,9 @@ public class PowerProgressBar extends View {
             fullPaint.setStrokeJoin(Paint.Join.BEVEL);
         }
 
-        mainPaint.setStrokeWidth(getProgressWidth());
         fullPaint.setStrokeWidth(getProgressWidth());
         rulerPaint.setStrokeWidth(getRawSize(TypedValue.COMPLEX_UNIT_DIP,1)); // 赋值1dp的宽度
+
 
         labelPaint.setTextSize(getLabelSize());
 
@@ -219,18 +219,20 @@ public class PowerProgressBar extends View {
             sweepGradient.setLocalMatrix(rotateMartix);
             mainPaint.setShader(sweepGradient);
         }
+
         if(progressWidth == -1) {
             setProgressWidth((int) (mRadius*getProgressWidthRate()));
         } else {
             setProgressWidth(progressWidth);
         }
+
         progressRectF = new RectF(centerX-mRadius,centerY-mRadius,centerX+mRadius,
                centerY+mRadius);
         startAngle  = (360f-getMaxAngle())/2+getBasePointAngle();
         float currentAngle = startAngle+(currentValue/100f)*getMaxAngle();
 
         // 清除路径
-        progressClipPath.reset();
+        progressClipPath.rewind();
         if(getProgressStyle() == ProgressStyle.CURSOR) {
             mainPaint.setStrokeWidth(1);
             progressClipPath.moveTo((float)(centerX+Math.cos(Math.toRadians(currentAngle-10))*(mRadius-fullPaint.getStrokeWidth()/2)),
@@ -244,7 +246,7 @@ public class PowerProgressBar extends View {
             progressClipPath.addArc(progressRectF,startAngle,(currentValue/100f)*getMaxAngle());
         }
 
-        progressFullPath.reset();
+        progressFullPath.rewind();
         progressFullPath.addArc(progressRectF,startAngle,getMaxAngle());
 
         float unitAngle = getMaxAngle()/(labelList.size()+1);
@@ -352,7 +354,7 @@ public class PowerProgressBar extends View {
             animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                 @Override
                 public void onAnimationUpdate(ValueAnimator valueAnimator) {
-                    currentValue = (float) valueAnimator.getAnimatedValue();
+                    currentValue = (Float) valueAnimator.getAnimatedValue();
                     reDraw();
                 }
             });
@@ -389,7 +391,7 @@ public class PowerProgressBar extends View {
             animator1.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                 @Override
                 public void onAnimationUpdate(ValueAnimator valueAnimator) {
-                    float value = (float) valueAnimator.getAnimatedValue();
+                    Float value = (Float) valueAnimator.getAnimatedValue();
                     BlurMaskFilter blurMaskFilter = new BlurMaskFilter(value,BlurMaskFilter.Blur.SOLID);
                     mainPaint.setMaskFilter(blurMaskFilter);
                     invalidate();
@@ -409,18 +411,23 @@ public class PowerProgressBar extends View {
         mWidth = w-getPaddingLeft()-getPaddingRight();
         mHeight = h-getPaddingTop()-getPaddingBottom();
         centerX = mWidth/2;
+        getProgressWidthRate();
         if(externalCircle) {
             centerY = mHeight/2;
             final int minDistance = centerX < centerY?centerX:centerY;
-            mRadius = (int)(9*(minDistance/10)-mainPaint.getStrokeWidth()*1.5f);
+            final int mRadiusOffset = progressWidth == -1? (int) (minDistance * progressWidthRate / 2) :progressWidth/2;
+            mRadius = (int) (minDistance-2*mRadiusOffset-externalPaint.getStrokeWidth());
         } else {
-            double tempDis = 1- Math.cos(Math.toRadians(360f-getMaxAngle())/2d);
-            int tempRadius = (9*mHeight/20);
+            double tempDis = 1- Math.cos(Math.toRadians((360f-getMaxAngle())/2d));
+            int tempRadius = mHeight/2;
             centerY = (int) (tempRadius+tempRadius*tempDis);
             final int minDistance = centerX < centerY?centerX:centerY;
-            mRadius = (int)(9*(minDistance/10)-mainPaint.getStrokeWidth());
+            final int mRadiusOffset = progressWidth == -1? (int) (minDistance * progressWidthRate / 2) :progressWidth/2;
+            final int mRadiusOffset2 = (int) Math.abs((tempRadius+mRadiusOffset)*(1-tempDis)-tempRadius*(1-tempDis));
+            final int mRadiusOffset3 = (int) getRawSize(TypedValue.COMPLEX_UNIT_DIP,1); // offset default Padding
+            mRadius = minDistance-mRadiusOffset-mRadiusOffset2-mRadiusOffset3;
         }
-        if(labelList.size() < 1) {
+        if(labelList.size() > 0) {
             mRadius = (int) (mRadius-labelPaint.getTextSize());
         }
         resetPath();
