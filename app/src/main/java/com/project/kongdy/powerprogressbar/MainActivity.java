@@ -37,6 +37,7 @@ public class MainActivity extends AppCompatActivity {
         progressBar1.setProgressStyle(PowerProgressBar.ProgressStyle.FILLLINE); // 设置进度条样式
         progressBar1.OpenHighQuality(false); // 关闭高画质
         progressBar1.setCenterView(view);
+        progressBar1.animalToStart(800);
 
         // style2
         progressBar2.setMaxAngle(360);
@@ -45,6 +46,7 @@ public class MainActivity extends AppCompatActivity {
         progressBar2.setBasePointAngle(270f); //使基点往前挪270度,默认90
         progressBar2.OpenHighQuality(false);
         progressBar2.setCenterView(view);
+        progressBar2.animalToStart(800);
 
         // style3
         progressBar3.setMaxAngle(90);
@@ -57,6 +59,7 @@ public class MainActivity extends AppCompatActivity {
                 Color.rgb(255,234,0),Color.rgb(252,181,3),Color.rgb(254,145,147));
         progressBar3.setProgressColor(new int[]{Color.WHITE});
         progressBar3.setCenterView(view);
+        progressBar3.animalToStart(800);
 
         // style4
         progressBar4.setMaxAngle(270);
@@ -67,6 +70,7 @@ public class MainActivity extends AppCompatActivity {
         progressBar4.setProgressWidthRate(0.15);
         progressBar4.setExternalCircle(true,Color.rgb(238,238,238)); // 增加一个外环
         progressBar4.setCenterView(view);
+        progressBar4.animalToStart(800);
 
     }
 

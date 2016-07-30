@@ -79,10 +79,6 @@ public class PowerProgressBar extends View {
     private float maxAngle = -1;
     /** 当前度数，便于动画 */
     private float currentValue = 0;
-    /** 开始动画持续时间 */
-    private long startAnimalTime;
-    /** 是否播放开始动画 */
-    private boolean startAnimal = true;
 
     private RectF progressRectF;
     /** 基点角度，计算过程中，将根据该值产生基点的角度偏移，默认90度 */
@@ -347,9 +343,8 @@ public class PowerProgressBar extends View {
         return TypedValue.applyDimension(unit,value,displayMetrics);
     }
 
-    private void animalToStart() {
+    public void animalToStart(long time) {
         if(animator == null) {
-            final long startTime = getStartAnimalTime();
             animator = ValueAnimator.ofFloat(0f,progressValue);
             animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                 @Override
@@ -375,8 +370,8 @@ public class PowerProgressBar extends View {
                 }
             });
             // 400毫秒的开启延迟
-            animator.setStartDelay(400);
-            animator.setDuration(startTime);
+            animator.setStartDelay(200);
+            animator.setDuration(time);
             animator.setInterpolator(new AccelerateInterpolator());
             animator.start();
         }
@@ -431,8 +426,6 @@ public class PowerProgressBar extends View {
             mRadius = (int) (mRadius-labelPaint.getTextSize());
         }
         resetPath();
-        // 控件发生改变，执行开始动画
-        animalToStart();
     }
 
     @Override
@@ -552,24 +545,6 @@ public class PowerProgressBar extends View {
         invalidate();
     }
 
-    public long getStartAnimalTime() {
-        if(startAnimalTime <= 0){
-            this.startAnimalTime = 800;
-        }
-        return startAnimalTime;
-    }
-
-    public void setStartAnimalTime(long startAnimalTime) {
-        this.startAnimalTime = startAnimalTime;
-    }
-
-    public boolean isStartAnimal() {
-        return startAnimal;
-    }
-
-    public void setStartAnimal(boolean startAnimal) {
-        this.startAnimal = startAnimal;
-    }
 
     public int getRulerColor() {
         if(!setRulerColor) {
