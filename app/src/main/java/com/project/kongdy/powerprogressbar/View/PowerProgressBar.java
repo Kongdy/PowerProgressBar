@@ -55,6 +55,7 @@ public class PowerProgressBar extends View {
     private int mRadius;
     private int centerX;
     private int centerY;
+    private int mRadiusOffsetAll;
 
     private int[] progressColor;
     private int progressBgColor;
@@ -419,7 +420,8 @@ public class PowerProgressBar extends View {
             final int mRadiusOffset = progressWidth == -1? (int) (minDistance * progressWidthRate / 2) :progressWidth/2;
             final int mRadiusOffset2 = (int) Math.abs((tempRadius+mRadiusOffset)*(1-tempDis)-tempRadius*(1-tempDis));
             final int mRadiusOffset3 = (int) getRawSize(TypedValue.COMPLEX_UNIT_DIP,1); // offset default Padding
-            mRadius = minDistance-mRadiusOffset-mRadiusOffset2-mRadiusOffset3;
+            mRadiusOffsetAll = mRadiusOffset+mRadiusOffset2+mRadiusOffset3;
+            mRadius = minDistance-mRadiusOffsetAll;
         }
         if(labelList.size() > 0) {
             mRadius = (int) (mRadius-labelPaint.getFontSpacing());
@@ -431,8 +433,10 @@ public class PowerProgressBar extends View {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         if(centerView != null) {
-            centerView.measure(MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED),
-                    MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED));
+            final int centerViewLengthHeight = (int) ((mRadius-progressWidth-mRadiusOffsetAll)*Math.cos(Math.toRadians(45f))*2);
+            final int centerViewLengthWidth = (int) ((mRadius)*Math.cos(Math.toRadians(45f))*2);
+            centerView.measure(MeasureSpec.makeMeasureSpec(centerViewLengthWidth,MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(centerViewLengthHeight,MeasureSpec.EXACTLY));
         }
     }
 
@@ -441,8 +445,10 @@ public class PowerProgressBar extends View {
      */
     private void drawCenterView(Canvas canvas) {
         if(centerView != null) {
-            float offsetX = centerX-mRadius+mainPaint.getStrokeWidth();
-            float offsetY = centerY-mRadius+mainPaint.getStrokeWidth();
+            final float centerViewHalfLength = (float) ((mRadius-progressWidth)*Math.cos(Math.toRadians(45f)));
+
+            float offsetX = centerX-centerViewHalfLength;
+            float offsetY = centerY-centerViewHalfLength;
 
             canvas.translate(offsetX,offsetY);
             centerView.draw(canvas);
@@ -455,9 +461,9 @@ public class PowerProgressBar extends View {
         if(centerView != null) {
 //            centerView.layout((int)(mWidth-mRadius+mainPaint.getStrokeWidth()),(int)(mHeight-mRadius+mainPaint.getStrokeWidth())
 //                    ,(int)(centerX+mRadius-mainPaint.getStrokeWidth()),(int)(centerY+mRadius-mainPaint.getStrokeWidth()));
- //           centerView.layout(0,0,mWidth,mHeight);
-            centerView.layout((int)(centerX-mRadius+mainPaint.getStrokeWidth()),(int)(centerY-mRadius+mainPaint.getStrokeWidth()),
-                    (int)(centerX+mRadius-mainPaint.getStrokeWidth()),(int)(centerY+mRadius-mainPaint.getStrokeWidth()));
+            //           centerView.layout(0,0,mWidth,mHeight);
+            centerView.layout(0,0,
+                    centerView.getMeasuredWidth(),centerView.getMeasuredHeight());
         }
     }
 

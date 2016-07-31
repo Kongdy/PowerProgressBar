@@ -54,7 +54,7 @@ public class MainActivity extends AppCompatActivity {
         progressBar2.animalToStart(800);
 
         // style3
-        progressBar3.setMaxAngle(270);
+        progressBar3.setMaxAngle(180);
         progressBar3.setProgressValue(75);
         progressBar3.setProgressStyle(PowerProgressBar.ProgressStyle.CURSOR);
         progressBar3.OpenHighQuality(true);
