@@ -114,6 +114,7 @@ public class PowerProgressBar extends View {
 
     private void init() {
 
+        setWillNotDraw(false);
         mainPaint = new Paint();
         fullPaint = new Paint();
         rulerPaint = new Paint();
@@ -198,9 +199,7 @@ public class PowerProgressBar extends View {
             canvas.drawLine(rulerStartCoord.get(i).x,rulerStartCoord.get(i).y,
                     rulerEndCoord.get(i).x,rulerEndCoord.get(i).y,rulerPaint);
         }
-        if(centerView != null) {
-            centerView.draw(canvas);
-        }
+        drawCenterView(canvas);
         canvas.restore();
     }
 
@@ -423,7 +422,7 @@ public class PowerProgressBar extends View {
             mRadius = minDistance-mRadiusOffset-mRadiusOffset2-mRadiusOffset3;
         }
         if(labelList.size() > 0) {
-            mRadius = (int) (mRadius-labelPaint.getTextSize());
+            mRadius = (int) (mRadius-labelPaint.getFontSpacing());
         }
         resetPath();
     }
@@ -432,8 +431,22 @@ public class PowerProgressBar extends View {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         if(centerView != null) {
-            centerView.measure(MeasureSpec.makeMeasureSpec(mWidth,MeasureSpec.EXACTLY),
-                    MeasureSpec.makeMeasureSpec(centerY*2,MeasureSpec.EXACTLY));
+            centerView.measure(MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED),
+                    MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED));
+        }
+    }
+
+    /**
+     * 计算偏移值，来移动centerView 的位置
+     */
+    private void drawCenterView(Canvas canvas) {
+        if(centerView != null) {
+            float offsetX = centerX-mRadius+mainPaint.getStrokeWidth();
+            float offsetY = centerY-mRadius+mainPaint.getStrokeWidth();
+
+            canvas.translate(offsetX,offsetY);
+            centerView.draw(canvas);
+            canvas.translate(-offsetX,-offsetY);
         }
     }
 
@@ -442,7 +455,9 @@ public class PowerProgressBar extends View {
         if(centerView != null) {
 //            centerView.layout((int)(mWidth-mRadius+mainPaint.getStrokeWidth()),(int)(mHeight-mRadius+mainPaint.getStrokeWidth())
 //                    ,(int)(centerX+mRadius-mainPaint.getStrokeWidth()),(int)(centerY+mRadius-mainPaint.getStrokeWidth()));
-            centerView.layout(100,30,mWidth,mHeight);
+ //           centerView.layout(0,0,mWidth,mHeight);
+            centerView.layout((int)(centerX-mRadius+mainPaint.getStrokeWidth()),(int)(centerY-mRadius+mainPaint.getStrokeWidth()),
+                    (int)(centerX+mRadius-mainPaint.getStrokeWidth()),(int)(centerY+mRadius-mainPaint.getStrokeWidth()));
         }
     }
 

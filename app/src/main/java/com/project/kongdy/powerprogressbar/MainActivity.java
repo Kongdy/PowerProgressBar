@@ -5,6 +5,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.LinearLayout;
 
 import com.project.kongdy.powerprogressbar.View.PowerProgressBar;
 
@@ -15,10 +16,14 @@ public class MainActivity extends AppCompatActivity {
     private PowerProgressBar progressBar3;
     private PowerProgressBar progressBar4;
 
+    private LinearLayout content;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        content = (LinearLayout) findViewById(R.id.content);
 
         View view = LayoutInflater.from(this).inflate(R.layout.layout,null);
 
@@ -49,7 +54,7 @@ public class MainActivity extends AppCompatActivity {
         progressBar2.animalToStart(800);
 
         // style3
-        progressBar3.setMaxAngle(90);
+        progressBar3.setMaxAngle(270);
         progressBar3.setProgressValue(75);
         progressBar3.setProgressStyle(PowerProgressBar.ProgressStyle.CURSOR);
         progressBar3.OpenHighQuality(true);
