@@ -8,6 +8,7 @@ import android.view.View;
 import android.widget.LinearLayout;
 
 import com.project.kongdy.powerprogressbar.View.PowerProgressBar;
+import com.project.kongdy.powerprogressbar.View.PowerProgressCenterView;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -25,7 +26,7 @@ public class MainActivity extends AppCompatActivity {
 
         content = (LinearLayout) findViewById(R.id.content);
 
-        View view = LayoutInflater.from(this).inflate(R.layout.layout,null);
+        PowerProgressCenterView view = (PowerProgressCenterView) LayoutInflater.from(this).inflate(R.layout.layout,null);
 
         progressBar1 = (PowerProgressBar) findViewById(R.id.progressBar1);
         progressBar2 = (PowerProgressBar) findViewById(R.id.progressBar2);
